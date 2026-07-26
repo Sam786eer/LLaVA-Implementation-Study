@@ -52,6 +52,23 @@ Its responsibilities include:
 
 ---
 
+---
+
+# Key Functions
+
+The `CLIPVisionTower` class provides a simple interface for loading and using the pretrained CLIP Vision Transformer.
+
+| Function | Purpose |
+|----------|---------|
+| `load_model()` | Loads the pretrained CLIP Vision Model and Image Processor |
+| `feature_select()` | Selects hidden states from the desired transformer layer |
+| `forward()` | Generates visual features from input images |
+| `dummy_feature()` | Returns a placeholder feature tensor when needed |
+
+Together, these functions manage the complete visual feature extraction pipeline.
+
+---
+
 # Initialization
 
 When the Vision Tower is created, it performs the following steps:
@@ -73,6 +90,30 @@ The actual model weights are loaded only once and reused throughout inference.
 
 ---
 
+---
+
+# Simplified Model Loading
+
+The initialization process can be summarized as:
+
+```python
+self.image_processor = CLIPImageProcessor.from_pretrained(model_name)
+
+self.vision_tower = CLIPVisionModel.from_pretrained(model_name)
+
+self.vision_tower.requires_grad_(False)
+```
+
+### Explanation
+
+1. Load the image preprocessing pipeline.
+2. Load the pretrained CLIP Vision Transformer.
+3. Freeze model parameters during inference.
+
+> **Note:** The official implementation contains additional configuration handling and delayed loading options. The snippet above is simplified for educational purposes.
+
+---
+
 # Image Processing
 
 Before an image reaches the Vision Transformer, it must be preprocessed.
@@ -90,25 +131,29 @@ These operations are handled by the CLIP Image Processor.
 
 # Forward Pass
 
-The forward pass is straightforward.
+The forward pass converts an image tensor into patch-level feature embeddings.
 
-```
-Input Image
-      │
-      ▼
-CLIP Vision Transformer
-      │
-      ▼
-Hidden States
-      │
-      ▼
-Feature Selection
-      │
-      ▼
-Visual Features
+### Simplified Implementation
+
+```python
+image_forward_out = self.vision_tower(images)
+
+image_features = self.feature_select(image_forward_out)
+
+return image_features
 ```
 
-Instead of classification scores, the model outputs hidden-state representations for every image patch.
+### Execution Flow
+
+```mermaid
+flowchart TD
+    A[Input Image Tensor] --> B[CLIP Vision Transformer]
+    B --> C[Hidden States]
+    C --> D[Feature Selection]
+    D --> E[Patch Embeddings]
+```
+
+The Vision Transformer produces hidden states for every transformer layer, after which the desired layer is selected as the visual representation.
 
 ---
 
@@ -148,16 +193,24 @@ where:
 
 # Feature Selection
 
-The CLIP model produces hidden states for every transformer layer.
+The Vision Transformer generates hidden states from every encoder layer.
 
-LLaVA allows selecting features from different layers.
+Instead of always using the final layer, LLaVA allows selecting features from a configurable layer.
 
-Typical options include:
+### Simplified Logic
 
-- Last Layer
-- Intermediate Layer
+```python
+image_features = image_forward_out.hidden_states[layer_index]
+```
 
-This flexibility enables experimentation with different visual representations.
+Depending on the configuration, the implementation may:
+
+- Use the last hidden layer
+- Use an intermediate hidden layer
+- Remove the CLS token
+- Keep only patch embeddings
+
+This flexibility allows experimentation with different visual representations while using the same pretrained CLIP model.
 
 ---
 
@@ -185,24 +238,50 @@ Advantages include:
 
 # Interaction with Other Files
 
+```mermaid
+flowchart LR
+    A[builder.py] --> B[clip_encoder.py]
+    B --> C[llava_arch.py]
+    C --> D[multimodal_projector.py]
+    D --> E[llava_llama.py]
 ```
-builder.py
-      │
-      ▼
-clip_encoder.py
-      │
-      ▼
-llava_arch.py
-      │
-      ▼
-multimodal_projector.py
-```
-
-The Vision Tower only extracts visual features.
-
-It does **not** perform multimodal fusion or language generation.
+---
 
 ---
+
+# Code Flow
+
+During inference, the execution sequence is:
+
+```
+Load Image
+
+↓
+
+process_images()
+
+↓
+
+CLIPImageProcessor
+
+↓
+
+CLIPVisionTower.forward()
+
+↓
+
+feature_select()
+
+↓
+
+Visual Features
+
+↓
+
+Multimodal Projector
+```
+
+The output of this file becomes the input to the Multimodal Projector, where feature alignment with the LLaMA embedding space begins.
 
 # Summary
 
