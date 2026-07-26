@@ -72,6 +72,86 @@ Each object serves a different purpose.
 
 ---
 
+# Core Function
+
+The central function of this file is:
+
+```python
+def load_pretrained_model(
+    model_path,
+    model_base,
+    model_name,
+    load_8bit=False,
+    load_4bit=False,
+    device_map="auto",
+    device="cuda",
+    **kwargs
+):
+```
+
+This function constructs and returns every component required for inference.
+
+---
+
+# What Happens Inside?
+
+The loading process follows these steps:
+
+```text
+Read Model Path
+        │
+        ▼
+Load Tokenizer
+        │
+        ▼
+Load LLaVA Model
+        │
+        ▼
+Load Vision Tower
+        │
+        ▼
+Load Image Processor
+        │
+        ▼
+Return Components
+```
+
+---
+
+# Simplified Implementation
+
+The overall logic can be summarized as:
+
+```python
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+model = LlavaLlamaForCausalLM.from_pretrained(model_path)
+
+vision_tower = model.get_vision_tower()
+
+vision_tower.load_model()
+
+image_processor = vision_tower.image_processor
+
+return tokenizer, model, image_processor, context_len
+```
+
+> **Note:** This is a simplified version for learning purposes. The official implementation also handles LoRA adapters, quantized models (4-bit/8-bit), device mapping, and configuration options.
+
+---
+
+# Function Responsibilities
+
+| Function | Purpose |
+|----------|---------|
+| `load_pretrained_model()` | Loads the complete LLaVA model |
+| `AutoTokenizer.from_pretrained()` | Loads the tokenizer |
+| `from_pretrained()` | Loads pretrained model weights |
+| `get_vision_tower()` | Returns the CLIP Vision Encoder |
+| `load_model()` | Loads the vision model weights |
+
+---
+
 ## Tokenizer
 
 Responsible for converting text into token IDs.
