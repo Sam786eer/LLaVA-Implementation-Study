@@ -46,6 +46,23 @@ It inherits from Hugging Face's `LlamaForCausalLM` and adds multimodal support.
 
 ---
 
+---
+
+# Key Functions
+
+The `LlavaLlamaForCausalLM` class extends the standard Hugging Face implementation by introducing multimodal capabilities.
+
+| Function | Purpose |
+|----------|---------|
+| `forward()` | Performs a multimodal forward pass |
+| `generate()` | Generates responses during inference |
+| `prepare_inputs_labels_for_multimodal()` | Builds multimodal embeddings before decoding |
+| `get_model()` | Returns the underlying LLaMA model |
+
+These functions allow LLaVA to process both text and images while preserving the original LLaMA architecture.
+
+---
+
 # Inheritance Structure
 
 ```
@@ -82,27 +99,63 @@ LlavaMetaModel
 
 ---
 
+---
+
+# Simplified Initialization
+
+The overall initialization process can be summarized as:
+
+```python
+self.model = LlavaMetaModel(config)
+
+self.lm_head = nn.Linear(
+    config.hidden_size,
+    config.vocab_size,
+    bias=False
+)
+```
+
+### Explanation
+
+1. Construct the multimodal LLaVA model.
+2. Initialize the language modeling head.
+3. Reuse the pretrained LLaMA transformer layers.
+
+> **Note:** The official implementation contains additional configuration logic and compatibility handling. The snippet above highlights the core construction process.
+
+---
+
 # Forward Pass
 
-The forward method follows this sequence:
+The forward method first checks whether images are present.
 
-```
-Input Prompt
-       │
-       ▼
-Check for Images
-       │
-       ▼
-Prepare Multimodal Inputs
-       │
-       ▼
-LLaMA Forward Pass
-       │
-       ▼
-Logits
+### Simplified Implementation
+
+```python
+if images is not None:
+
+    inputs_embeds = self.prepare_inputs_labels_for_multimodal(...)
+
+return super().forward(
+    inputs_embeds=inputs_embeds,
+    labels=labels
+)
 ```
 
-If no images are present, the model behaves exactly like a standard LLaMA model.
+### Execution Flow
+
+```mermaid
+flowchart TD
+    A[Input IDs + Images]
+    --> B{Images Present?}
+    B -->|Yes| C[Prepare Multimodal Inputs]
+    B -->|No| D[Use Text Embeddings]
+    C --> E[LLaMA Forward]
+    D --> E
+    E --> F[Logits]
+```
+
+If an image is provided, multimodal embeddings are constructed before calling the underlying LLaMA implementation.
 
 ---
 
@@ -127,34 +180,39 @@ The resulting embeddings are then passed to the LLaMA decoder.
 
 # Text Generation
 
-Inference uses the standard Hugging Face generation API:
+Inference relies on Hugging Face's generation framework.
+
+### Simplified Implementation
 
 ```python
-model.generate(...)
+output_ids = model.generate(
+
+    input_ids,
+
+    images=images,
+
+    max_new_tokens=512,
+
+    temperature=0.2
+)
 ```
 
-Internally, generation proceeds as:
+Internally, generation follows this sequence:
 
-```
-Prompt
-      │
-      ▼
-Image Encoding
-      │
-      ▼
-Embedding Construction
-      │
-      ▼
-LLaMA Decoder
-      │
-      ▼
-Next Token Prediction
-      │
-      ▼
-Repeat
+```mermaid
+flowchart TD
+    A[Prompt + Image]
+    --> B[Vision Encoder]
+    B --> C[MM Projector]
+    C --> D[Prepare Embeddings]
+    D --> E[LLaMA Decoder]
+    E --> F[Next Token]
+    F --> G{Finished?}
+    G -->|No| E
+    G -->|Yes| H[Generated Response]
 ```
 
-The decoder predicts one token at a time until an end-of-sequence token is produced or the maximum generation length is reached.
+The decoder repeatedly predicts the next token until an end-of-sequence token or the maximum generation length is reached.
 
 ---
 
@@ -186,24 +244,79 @@ Only the multimodal components need to be added.
 
 ---
 
-# Interaction with Other Files
+```mermaid
+flowchart LR
 
-```
-builder.py
-      │
-      ▼
-llava_arch.py
-      │
-      ▼
-llava_llama.py
-      │
-      ▼
-transformers.LlamaForCausalLM
-```
+A[builder.py]
 
-`llava_llama.py` acts as the interface between LLaVA's multimodal architecture and the underlying Hugging Face language model.
+--> B[llava_arch.py]
+
+--> C[llava_llama.py]
+
+--> D[transformers.LlamaForCausalLM]
+
+--> E[Generated Output]
+```
 
 ---
+
+---
+
+# Code Flow
+
+The execution sequence during inference is:
+
+```
+run_llava.py
+
+↓
+
+load_pretrained_model()
+
+↓
+
+prepare_inputs_labels_for_multimodal()
+
+↓
+
+forward()
+
+↓
+
+LLaMA Decoder
+
+↓
+
+generate()
+
+↓
+
+Decode Tokens
+
+↓
+
+Final Response
+```
+
+The `llava_llama.py` file is the final stage before text generation, combining multimodal embeddings with the autoregressive decoder inherited from LLaMA.
+
+---
+
+# Why This Design?
+
+Instead of modifying the internal transformer layers, LLaVA extends the existing `LlamaForCausalLM` implementation.
+
+This design offers several advantages:
+
+- Reuses Hugging Face's optimized transformer implementation.
+- Maintains compatibility with existing checkpoints.
+- Simplifies future upgrades to newer LLaMA versions.
+- Keeps multimodal logic separate from language modeling logic.
+
+By following an inheritance-based design, LLaVA introduces multimodal capabilities with minimal changes to the underlying language model.
+
+---
+
 
 # Summary
 
