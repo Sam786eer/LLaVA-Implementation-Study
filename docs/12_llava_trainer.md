@@ -50,43 +50,38 @@ Only multimodal-specific behavior needs to be customized.
 
 ---
 
-# Main Responsibilities
+---
 
-The trainer is responsible for:
+# Key Functions
 
-- Executing the training loop
-- Computing gradients
-- Updating model parameters
-- Saving checkpoints
-- Managing distributed training
-- Logging training metrics
+`LLaVATrainer` extends Hugging Face's `Trainer` and customizes it for multimodal training.
+
+| Function | Purpose |
+|----------|---------|
+| `create_optimizer()` | Creates the optimizer for model training |
+| `create_scheduler()` | Initializes the learning rate scheduler |
+| `_save_checkpoint()` | Saves intermediate checkpoints |
+| `_save()` | Stores the final trained model |
+
+These methods build upon Hugging Face's training framework while adding LLaVA-specific functionality.
 
 ---
 
 # Training Loop
 
-Each iteration follows the same sequence.
+Every optimization step follows the same sequence.
 
-```
-Mini Batch
-     │
-     ▼
-Forward Pass
-     │
-     ▼
-Compute Loss
-     │
-     ▼
-Backward Pass
-     │
-     ▼
-Gradient Update
-     │
-     ▼
-Next Batch
+```mermaid
+flowchart TD
+    A[Mini Batch]
+    --> B[Forward Pass]
+    --> C[Compute Loss]
+    --> D[Backward Pass]
+    --> E[Gradient Update]
+    --> F[Next Batch]
 ```
 
-This process repeats until all epochs are completed.
+The trainer repeats this process until all epochs have been completed.
 
 ---
 
@@ -121,47 +116,73 @@ The trainer calls the model and receives the computed loss directly.
 
 ---
 
+---
+
+# Simplified Forward Step
+
+The trainer delegates computation to the LLaVA model.
+
+```python
+outputs = model(
+
+    input_ids=input_ids,
+
+    images=images,
+
+    labels=labels
+)
+
+loss = outputs.loss
+```
+
+### Explanation
+
+1. Pass images and text to the model.
+2. Compute predictions.
+3. Calculate the training loss.
+4. Return the loss for optimization.
+
+The trainer itself does not compute predictions—it simply coordinates the optimization process.
+
+---
+
 # Backpropagation
 
-Once the loss has been computed, gradients are calculated.
+Once the loss has been computed, gradients are calculated automatically.
 
-```
-Loss
+### Simplified Implementation
 
-↓
-
-Backward()
-
-↓
-
-Gradients
-
-↓
-
-Optimizer
+```python
+loss.backward()
 ```
 
-These gradients indicate how each parameter should be updated to reduce future prediction errors.
+Execution Flow:
+
+```mermaid
+flowchart LR
+    A[Loss]
+    --> B[Backward]
+    --> C[Gradients]
+    --> D[Optimizer]
+```
+
+The gradients indicate how every trainable parameter should be updated.
 
 ---
 
 # Optimizer Step
 
-After gradients are computed:
+After gradients are available, the optimizer updates the model parameters.
 
-```
-Current Parameters
+### Simplified Implementation
 
-↓
+```python
+optimizer.step()
 
-Optimizer
-
-↓
-
-Updated Parameters
+optimizer.zero_grad()
 ```
 
-The optimizer adjusts the weights of the trainable components according to the learning rate and optimization algorithm.
+The optimizer adjusts the weights, after which the accumulated gradients are cleared before the next iteration.
 
 ---
 
@@ -248,16 +269,22 @@ This enables efficient training on large datasets.
 
 # Checkpoint Management
 
-The trainer periodically saves checkpoints during training.
+Training checkpoints are saved periodically to prevent loss of progress.
 
-A checkpoint includes:
+### Simplified Logic
+
+```python
+trainer.save_model(output_dir)
+```
+
+A checkpoint typically stores:
 
 - Model weights
 - Optimizer state
-- Learning rate scheduler
-- Current training step
+- Scheduler state
+- Training progress
 
-Saving checkpoints allows training to resume after interruptions and provides intermediate models for evaluation.
+These checkpoints allow interrupted training sessions to resume from the last saved state.
 
 ---
 
@@ -276,22 +303,55 @@ These logs help monitor convergence and identify potential training issues.
 
 # Interaction with Other Files
 
+```mermaid
+flowchart LR
+    A[train.py]
+    --> B[LLaVATrainer]
+    --> C[LLaVA Model]
+    --> D[Optimizer]
+    --> E[Checkpoint]
 ```
-train.py
-      │
-      ▼
-llava_trainer.py
-      │
-      ▼
-llava_llama.py
-      │
-      ▼
-LLaVA Model
-```
-
-The trainer coordinates optimization while the model performs the forward computation.
 
 ---
+
+---
+
+# Code Flow
+
+The trainer executes the following sequence during optimization:
+
+```
+trainer.train()
+
+↓
+
+Forward Pass
+
+↓
+
+Compute Loss
+
+↓
+
+loss.backward()
+
+↓
+
+optimizer.step()
+
+↓
+
+Save Checkpoint
+
+↓
+
+Next Iteration
+```
+
+The `LLaVATrainer` class manages the optimization loop while delegating the actual multimodal computation to the LLaVA model.
+
+---
+
 
 # Summary
 
