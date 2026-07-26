@@ -64,6 +64,23 @@ These classes extend the Hugging Face LLaMA implementation with multimodal capab
 
 ---
 
+---
+
+# Key Functions
+
+The following functions implement the core multimodal logic of LLaVA.
+
+| Function | Purpose |
+|----------|---------|
+| `initialize_vision_modules()` | Initializes the Vision Tower and MM Projector |
+| `get_vision_tower()` | Returns the loaded Vision Tower |
+| `encode_images()` | Converts images into projected visual embeddings |
+| `prepare_inputs_labels_for_multimodal()` | Merges image embeddings with text embeddings |
+
+These functions work together to bridge the gap between the vision encoder and the language model.
+
+---
+
 # LlavaMetaModel
 
 This class is responsible for constructing the vision-related components.
@@ -130,6 +147,31 @@ The output is no longer in the CLIP embedding space—it has already been projec
 
 ---
 
+---
+
+# Simplified Implementation
+
+The implementation follows the sequence below:
+
+```python
+vision_tower = self.get_vision_tower()
+
+image_features = vision_tower(images)
+
+image_features = self.mm_projector(image_features)
+
+return image_features
+```
+
+### Step-by-step explanation
+
+1. The Vision Tower extracts patch-level visual features from the input image.
+2. These features are still in the CLIP embedding space.
+3. The Multimodal Projector transforms them into the LLaMA embedding space.
+4. The projected embeddings are returned for multimodal processing.
+
+> **Note:** This is a simplified representation for educational purposes. The official implementation includes additional handling for feature selection, batching, and configuration.
+
 # Why Projection Is Necessary
 
 The Vision Tower and LLaMA use different embedding dimensions.
@@ -170,6 +212,32 @@ At a high level, it performs the following steps:
 6. Return embeddings and labels to the language model.
 
 ---
+
+---
+
+# Simplified Logic
+
+The overall logic can be summarized as:
+
+```python
+image_features = self.encode_images(images)
+
+inputs_embeds = self.get_model().embed_tokens(input_ids)
+
+replace_image_tokens_with_embeddings()
+
+return inputs_embeds
+```
+
+The actual implementation performs additional operations such as:
+
+- Padding
+- Attention mask creation
+- Label alignment
+- Position ID generation
+- Batch processing
+
+However, the fundamental idea remains the same: replace the `<image>` placeholder with projected image embeddings before passing the sequence to LLaMA.
 
 # Embedding Replacement
 
@@ -227,42 +295,18 @@ This design keeps LLaVA simple while leveraging the existing capabilities of LLa
 
 # Data Flow
 
+```mermaid
+flowchart TD
+    A[User Prompt] --> C[Tokenization]
+    B[Input Image] --> D[Vision Encoder]
+    D --> E[MM Projector]
+    C --> F[Text Embeddings]
+    E --> G[Image Embeddings]
+    F --> H[Merged Embeddings]
+    G --> H
+    H --> I[LLaMA Decoder]
+    I --> J[Generated Response]
 ```
-Prompt
-
-+
-
-Image
-
-      │
-      ▼
-
-Tokenization
-
-+
-
-Image Processing
-
-      │
-      ▼
-
-Text Embeddings
-
-+
-
-Image Embeddings
-
-      │
-      ▼
-
-Merged Embeddings
-
-      │
-      ▼
-
-LLaMA Decoder
-```
-
 ---
 
 # Interaction with Other Files
@@ -290,6 +334,39 @@ llava_llama.py
 This file acts as the bridge between the vision encoder and the language model.
 
 ---
+
+---
+
+# Code Flow
+
+The execution order during inference is:
+
+```
+run_llava.py
+      │
+      ▼
+load_pretrained_model()
+      │
+      ▼
+prepare_inputs_labels_for_multimodal()
+      │
+      ▼
+encode_images()
+      │
+      ▼
+Vision Tower
+      │
+      ▼
+MM Projector
+      │
+      ▼
+LLaMA Forward Pass
+      │
+      ▼
+Generated Response
+```
+
+This flow illustrates how `llava_arch.py` coordinates the interaction between the vision encoder and the language model.
 
 # Summary
 
