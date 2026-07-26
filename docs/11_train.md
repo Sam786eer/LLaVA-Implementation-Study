@@ -28,54 +28,40 @@ This file serves as the controller for the training process.
 
 ---
 
-# Responsibilities
+---
 
-The major responsibilities of `train.py` include:
+# Key Functions
 
-- Parsing training configurations
-- Loading the pretrained LLaVA model
-- Initializing the tokenizer
-- Preparing training datasets
-- Configuring multimodal settings
-- Creating the trainer
-- Saving checkpoints
+The `train.py` file coordinates the complete training workflow by initializing all required components.
+
+| Function | Purpose |
+|----------|---------|
+| `train()` | Main entry point for training |
+| `make_supervised_data_module()` | Creates the dataset and data collator |
+| `safe_save_model_for_hf_trainer()` | Safely saves model checkpoints |
+| `smart_tokenizer_and_embedding_resize()` | Updates tokenizer and embedding layers when adding special tokens |
+
+These functions work together to prepare data, configure the model, and launch training.
 
 ---
 
 # Training Workflow
 
-The complete workflow is:
+The training process follows the sequence below.
 
+```mermaid
+flowchart TD
+    A[Parse Arguments]
+    --> B[Load Tokenizer]
+    --> C[Load LLaVA Model]
+    --> D[Initialize Vision Tower]
+    --> E[Prepare Dataset]
+    --> F[Create Data Collator]
+    --> G[Initialize LLaVATrainer]
+    --> H[Start Training]
 ```
-Training Script
-       │
-       ▼
-Parse Arguments
-       │
-       ▼
-Load Model
-       │
-       ▼
-Load Tokenizer
-       │
-       ▼
-Initialize Vision Tower
-       │
-       ▼
-Load Dataset
-       │
-       ▼
-Data Collator
-       │
-       ▼
-LLaVATrainer
-       │
-       ▼
-Training Loop
-       │
-       ▼
-Save Model
-```
+
+Each stage prepares the next component until the complete training pipeline is ready.
 
 ---
 
@@ -95,6 +81,38 @@ These arguments define:
 - Distributed training settings
 
 This design allows experiments to be configured without modifying the source code.
+
+---
+
+---
+
+# Simplified Training Entry
+
+The overall training process begins with:
+
+```python
+def train():
+
+    model = load_pretrained_model(...)
+
+    tokenizer = AutoTokenizer.from_pretrained(...)
+
+    data_module = make_supervised_data_module(...)
+
+    trainer = LLaVATrainer(...)
+
+    trainer.train()
+```
+
+### Explanation
+
+1. Load the pretrained model.
+2. Initialize the tokenizer.
+3. Prepare the training dataset.
+4. Create the trainer.
+5. Start optimization.
+
+> **Note:** The official implementation supports many additional configuration options such as DeepSpeed, LoRA, quantization, and distributed training. The snippet above focuses on the core workflow.
 
 ---
 
@@ -141,47 +159,55 @@ Depending on the training stage, some components remain frozen while others are 
 
 # Dataset Preparation
 
-The dataset contains paired image-text examples.
+Training samples consist of paired images and conversations.
 
-Each training sample consists of:
+### Dataset Structure
 
 ```
-Image
+Sample
 
-+
-
-Conversation
-
-↓
-
-Training Example
+├── Image
+├── Prompt
+└── Response
 ```
 
-The dataset loader converts these samples into tensors suitable for model training.
+The dataset module converts these samples into tensors that can be processed by the multimodal model.
+
+```mermaid
+flowchart LR
+    A[Image + Conversation]
+    --> B[Dataset Loader]
+    --> C[Tokenization]
+    --> D[Training Sample]
+```
 
 ---
 
 # Data Collator
 
-Individual samples are combined into mini-batches by the data collator.
+The data collator combines multiple samples into a mini-batch.
+
+### Simplified Logic
+
+```python
+batch = {
+
+    "input_ids": input_ids,
+
+    "labels": labels,
+
+    "images": images
+}
+```
 
 Responsibilities include:
 
 - Padding sequences
-- Stacking image tensors
 - Creating attention masks
-- Preparing labels
+- Stacking image tensors
+- Aligning labels
 
-Output example:
-
-```
-Batch
-
-├── Images
-├── Input IDs
-├── Labels
-└── Attention Masks
-```
+The output batch is then passed to the trainer.
 
 ---
 
@@ -221,25 +247,50 @@ This allows interrupted training to resume without starting from scratch.
 
 # Interaction with Other Files
 
+```mermaid
+flowchart LR
+    A[train.py]
+    --> B[builder.py]
+    --> C[llava_arch.py]
+    --> D[LLaVATrainer]
+    --> E[Model Training]
 ```
-train.py
-     │
-     ▼
-builder.py
-     │
-     ▼
-llava_arch.py
-     │
-     ▼
-LLaVATrainer
-     │
-     ▼
-Dataset
-```
-
-`train.py` coordinates the entire training pipeline but delegates the actual optimization process to the trainer.
+---
 
 ---
+
+# Code Flow
+
+The execution order during training is:
+
+```
+train()
+
+↓
+
+load_pretrained_model()
+
+↓
+
+make_supervised_data_module()
+
+↓
+
+LLaVATrainer()
+
+↓
+
+trainer.train()
+
+↓
+
+Save Checkpoint
+```
+
+The `train.py` file acts as the controller of the complete training pipeline, delegating optimization to `LLaVATrainer`.
+
+---
+
 
 # Summary
 
