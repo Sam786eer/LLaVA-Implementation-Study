@@ -1,0 +1,224 @@
+# CLIP Vision Encoder (`clip_encoder.py`)
+
+## Introduction
+
+The `clip_encoder.py` file implements the Vision Tower used by LLaVA. Its primary responsibility is to load a pretrained CLIP Vision Transformer and convert input images into high-dimensional visual feature representations.
+
+Unlike traditional image classification models, the CLIP Vision Encoder does not produce class labels. Instead, it generates feature embeddings that capture the semantic content of an image. These embeddings are later projected into the LLaMA embedding space using the Multimodal Projector.
+
+---
+
+# Position in the Pipeline
+
+```
+Image
+ │
+ ▼
+Image Processor
+ │
+ ▼
+CLIP Vision Encoder
+ │
+ ▼
+Visual Features
+ │
+ ▼
+Multimodal Projector
+ │
+ ▼
+LLaMA
+```
+
+This file is responsible only for the highlighted stage: converting images into visual features.
+
+---
+
+# Main Class
+
+The primary class defined in this file is:
+
+```python
+CLIPVisionTower
+```
+
+This class acts as a wrapper around Hugging Face's `CLIPVisionModel`.
+
+Its responsibilities include:
+
+- Loading the pretrained vision model
+- Loading the image processor
+- Encoding images
+- Returning hidden-state features
+
+---
+
+# Initialization
+
+When the Vision Tower is created, it performs the following steps:
+
+```
+Configuration
+      │
+      ▼
+Load CLIPVisionModel
+      │
+      ▼
+Load CLIPImageProcessor
+      │
+      ▼
+Store Model Configuration
+```
+
+The actual model weights are loaded only once and reused throughout inference.
+
+---
+
+# Image Processing
+
+Before an image reaches the Vision Transformer, it must be preprocessed.
+
+Typical preprocessing steps include:
+
+- Resize
+- Center Crop
+- Normalize
+- Convert to Tensor
+
+These operations are handled by the CLIP Image Processor.
+
+---
+
+# Forward Pass
+
+The forward pass is straightforward.
+
+```
+Input Image
+      │
+      ▼
+CLIP Vision Transformer
+      │
+      ▼
+Hidden States
+      │
+      ▼
+Feature Selection
+      │
+      ▼
+Visual Features
+```
+
+Instead of classification scores, the model outputs hidden-state representations for every image patch.
+
+---
+
+# Patch Embeddings
+
+The Vision Transformer divides an image into fixed-size patches.
+
+For example:
+
+```
+336 × 336 Image
+
+↓
+
+24 × 24 patches
+
+↓
+
+576 Patch Tokens
+```
+
+Each patch is represented by a feature vector.
+
+Typical output shape:
+
+```
+(B, 576, 1024)
+```
+
+where:
+
+- **B** = Batch Size
+- **576** = Number of image patches
+- **1024** = Feature dimension
+
+---
+
+# Feature Selection
+
+The CLIP model produces hidden states for every transformer layer.
+
+LLaVA allows selecting features from different layers.
+
+Typical options include:
+
+- Last Layer
+- Intermediate Layer
+
+This flexibility enables experimentation with different visual representations.
+
+---
+
+# Why Hidden States?
+
+Using hidden states instead of classification outputs preserves detailed spatial information.
+
+Each token corresponds to a specific image region, allowing the language model to reason about different parts of the image.
+
+---
+
+# Lazy Loading
+
+To reduce memory usage, the Vision Tower supports delayed model loading.
+
+Instead of immediately loading the large CLIP model during object creation, the implementation can postpone loading until the model is actually needed.
+
+Advantages include:
+
+- Faster startup
+- Lower memory consumption
+- Flexible distributed training
+
+---
+
+# Interaction with Other Files
+
+```
+builder.py
+      │
+      ▼
+clip_encoder.py
+      │
+      ▼
+llava_arch.py
+      │
+      ▼
+multimodal_projector.py
+```
+
+The Vision Tower only extracts visual features.
+
+It does **not** perform multimodal fusion or language generation.
+
+---
+
+# Summary
+
+The `clip_encoder.py` file wraps the pretrained CLIP Vision Transformer and provides a clean interface for image encoding.
+
+Its responsibilities include:
+
+- Loading the CLIP Vision Model
+- Preprocessing images
+- Producing visual feature embeddings
+- Returning patch-level representations
+
+The generated features are then passed to the Multimodal Projector for alignment with the LLaMA embedding space.
+
+---
+
+# Next
+
+The next document explains the Multimodal Projector (`multimodal_projector/builder.py`), which transforms CLIP feature vectors into embeddings compatible with the LLaMA language model.
