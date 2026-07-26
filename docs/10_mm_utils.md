@@ -43,6 +43,23 @@ The major responsibilities of this file include:
 
 ---
 
+---
+
+# Key Functions
+
+The `mm_utils.py` file contains reusable helper functions used throughout the LLaVA repository.
+
+| Function | Purpose |
+|----------|---------|
+| `process_images()` | Converts raw images into tensors |
+| `tokenizer_image_token()` | Inserts special image tokens into prompts |
+| `get_model_name_from_path()` | Extracts the model name from a checkpoint path |
+| `KeywordsStoppingCriteria` | Stops generation when predefined keywords are produced |
+
+These utilities simplify image preprocessing and prompt handling across both training and inference.
+
+---
+
 # Image Processing
 
 Images received from the user must be converted into tensors before they can be passed to the Vision Encoder.
@@ -71,64 +88,66 @@ The resulting tensor is compatible with the CLIP Vision Encoder.
 
 # process_images()
 
-One of the most commonly used helper functions is:
+This helper converts one or more user images into tensors compatible with the Vision Encoder.
+
+### Simplified Implementation
 
 ```python
-process_images()
+image_tensors = image_processor(
+
+    images,
+
+    return_tensors="pt"
+
+)["pixel_values"]
+
+return image_tensors
 ```
 
-Responsibilities:
+### Execution Flow
 
-- Accept one or more images
-- Apply the CLIP Image Processor
-- Convert images into tensors
-- Return batched image tensors
-
-Output example:
-
+```mermaid
+flowchart TD
+    A[Input Image]
+    --> B[Image Processor]
+    --> C[Resize]
+    --> D[Normalize]
+    --> E[Tensor Conversion]
+    --> F[Batched Tensor]
 ```
-(B, 3, 336, 336)
-```
 
-where:
-
-- **B** = Batch Size
-- **3** = RGB Channels
-- **336 × 336** = Image Resolution
+The returned tensor is directly passed to the CLIP Vision Encoder.
 
 ---
 
 # tokenizer_image_token()
 
-Text prompts containing images require special placeholder tokens.
+The tokenizer must preserve the `<image>` placeholder while converting text into token IDs.
 
-Example prompt:
+### Simplified Implementation
 
-```
-USER:
+```python
+prompt = prompt.replace(
 
-<image>
+    "<image>",
 
-Describe this picture.
-```
+    DEFAULT_IMAGE_TOKEN
+)
 
-The tokenizer converts this into token IDs while preserving the image placeholder.
-
-Example:
-
-```
-Text
-
-↓
-
-Special Image Token
-
-↓
-
-Token IDs
+input_ids = tokenizer(prompt).input_ids
 ```
 
-Later, this placeholder is replaced by image embeddings inside `llava_arch.py`.
+The `<image>` placeholder is **not** removed during tokenization.
+
+Instead, it is preserved so that `prepare_inputs_labels_for_multimodal()` can later replace it with projected image embeddings.
+
+```mermaid
+flowchart LR
+    A[Prompt]
+    --> B[Insert Image Token]
+    --> C[Tokenizer]
+    --> D[Input IDs]
+```
 
 ---
 
@@ -152,23 +171,28 @@ This simplifies configuration and logging across the repository.
 
 # KeywordsStoppingCriteria
 
-During text generation, the model should stop when a predefined keyword or separator is generated.
+During autoregressive generation, the model should stop once a predefined separator or keyword has been generated.
 
-Example:
+### Simplified Logic
 
-```
-Generated Tokens
+```python
+if generated_text.endswith(stop_keyword):
 
-↓
-
-Detect Stop Keyword
-
-↓
-
-Terminate Generation
+    return True
 ```
 
-This prevents unnecessary output beyond the expected assistant response.
+Execution flow:
+
+```mermaid
+flowchart TD
+    A[Generated Token]
+    --> B[Append to Output]
+    --> C{Stop Keyword?}
+    C -->|Yes| D[Stop Generation]
+    C -->|No| E[Continue Decoding]
+```
+
+This prevents the model from generating unnecessary text after completing the assistant's response.
 
 ---
 
@@ -188,27 +212,58 @@ Centralizing these operations provides several benefits:
 
 # Interaction with Other Files
 
+```mermaid
+flowchart LR
+    A[conversation.py]
+    --> B[mm_utils.py]
+    --> C[clip_encoder.py]
+    --> D[llava_arch.py]
+    --> E[run_llava.py]
 ```
-conversation.py
-        │
-        ▼
-mm_utils.py
-        │
-        ├── Image Processing
-        ├── Prompt Utilities
-        ├── Token Utilities
-        └── Stopping Criteria
-        │
-        ▼
-run_llava.py
-        │
-        ▼
-llava_arch.py
-```
-
-Nearly every inference-related module relies on helper functions defined in this file.
+---
 
 ---
+
+# Code Flow
+
+The helper functions are used throughout the inference pipeline.
+
+```
+User Image
+
+↓
+
+process_images()
+
+↓
+
+Image Tensor
+
+↓
+
+Vision Encoder
+
+↓
+
+tokenizer_image_token()
+
+↓
+
+Input IDs
+
+↓
+
+prepare_inputs_labels_for_multimodal()
+
+↓
+
+Generation
+```
+
+Although `mm_utils.py` does not implement any neural network components, it provides essential preprocessing utilities that connect user input with the multimodal model.
+
+---
+
 
 # Summary
 
