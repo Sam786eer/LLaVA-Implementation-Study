@@ -100,29 +100,28 @@ Advantages:
 
 ## 2. MLP Projector
 
-```
-1024
+The default LLaVA implementation uses a small Multi-Layer Perceptron (MLP) for feature alignment.
 
-↓
-
-Linear
-
-↓
-
-GELU
-
-↓
-
-Linear
-
-↓
-
-4096
+```mermaid
+flowchart LR
+    A[1024-D CLIP Feature]
+    --> B[Linear]
+    --> C[GELU]
+    --> D[Linear]
+    --> E[4096-D LLaMA Feature]
 ```
 
-This is the default configuration used in LLaVA.
+### Simplified Implementation
 
-Compared to a single linear layer, the MLP can learn more expressive nonlinear mappings.
+```python
+projector = nn.Sequential(
+    nn.Linear(1024, 4096),
+    nn.GELU(),
+    nn.Linear(4096, 4096)
+)
+```
+
+Compared to a single linear layer, the MLP learns a richer nonlinear transformation between the CLIP and LLaMA embedding spaces.
 
 ---
 
@@ -143,6 +142,21 @@ Output
 No transformation is performed.
 
 This option is useful only when the feature dimensions are already compatible.
+
+---
+
+---
+
+# Key Functions
+
+The projector module is responsible for constructing the feature alignment network used between the Vision Encoder and the Language Model.
+
+| Function | Purpose |
+|----------|---------|
+| `build_vision_projector()` | Creates the projector specified in the configuration |
+| `forward()` | Projects CLIP features into the LLaMA embedding space |
+
+Unlike the Vision Tower, the projector is lightweight and usually contains only a few trainable layers.
 
 ---
 
@@ -174,29 +188,56 @@ This design makes it easy to experiment with different projector architectures.
 
 ---
 
+---
+
+# Simplified Construction Logic
+
+The builder dynamically selects the projector architecture.
+
+```python
+if projector_type == "linear":
+    projector = nn.Linear(mm_hidden_size, hidden_size)
+
+elif projector_type == "mlp":
+    projector = nn.Sequential(
+        nn.Linear(mm_hidden_size, hidden_size),
+        nn.GELU(),
+        nn.Linear(hidden_size, hidden_size)
+    )
+
+elif projector_type == "identity":
+    projector = IdentityMap()
+```
+
+### Explanation
+
+- **Linear** uses a single fully connected layer.
+- **MLP** adds a non-linear GELU activation for greater expressive power.
+- **Identity** performs no transformation and is mainly used for experimentation.
+
+> **Note:** The official implementation supports additional configuration options. The snippet above illustrates the core logic.
+
+---
+
 # Tensor Transformation
 
-Example:
+During inference, only the embedding dimension changes.
 
-Before projection:
-
-```
-(B, 576, 1024)
-```
-
-After projection:
-
-```
-(B, 576, 4096)
+```mermaid
+flowchart LR
+    A["(B,576,1024)"]
+    --> B[MLP Projector]
+    --> C["(B,576,4096)"]
 ```
 
-Notice that:
+Where:
 
-- Batch size remains unchanged.
-- Number of visual tokens remains unchanged.
-- Only the feature dimension changes.
+- **B** = Batch Size
+- **576** = Number of image patches
+- **1024** = CLIP embedding dimension
+- **4096** = LLaMA embedding dimension
 
-This transformed tensor is now compatible with LLaMA.
+The projector preserves both the batch size and the number of visual tokens while aligning the feature dimension.
 
 ---
 
@@ -229,6 +270,54 @@ llava_llama.py
 ```
 
 The projector serves as the bridge between image features and the language model.
+
+---
+
+---
+
+# Code Flow
+
+The projector executes immediately after visual feature extraction.
+
+```
+Image
+
+↓
+
+CLIP Vision Encoder
+
+↓
+
+Patch Features
+
+↓
+
+MM Projector.forward()
+
+↓
+
+Projected Embeddings
+
+↓
+
+prepare_inputs_labels_for_multimodal()
+```
+
+These projected embeddings are now compatible with the language model and can replace the `<image>` placeholder token in the prompt.
+
+---
+
+---
+
+# Projector Comparison
+
+| Projector | Layers | Non-Linearity | Typical Usage |
+|-----------|--------|---------------|---------------|
+| Linear | 1 | No | Simple baseline |
+| MLP | 2 | GELU | Default LLaVA configuration |
+| Identity | 0 | No | Compatible embedding spaces only |
+
+The MLP projector provides a balance between computational efficiency and expressive feature alignment, making it the preferred choice in the official LLaVA implementation.
 
 ---
 
